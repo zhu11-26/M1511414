@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>班級抽籤器</title>
+  <style>
+    * { box-sizing: border-box; font-family: "Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif; }
+    body { margin: 0; min-height: 100vh; background: linear-gradient(135deg, #eef4ff, #f7f0ff); color: #222; display: flex; justify-content: center; padding: 24px; }
+    .container { width: 100%; max-width: 900px; background: #fff; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.08); padding: 28px; }
+    h1 { margin: 0 0 6px; color: #2b4c8c; }
+    p.subtitle { margin: 0 0 24px; color: #666; }
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    label { display: block; font-weight: 700; margin-bottom: 8px; }
+    textarea, input { width: 100%; padding: 12px; border: 2px solid #d8e0ef; border-radius: 10px; font-size: 16px; outline: none; }
+    textarea { height: 220px; resize: vertical; }
+    textarea:focus, input:focus { border-color: #2b4c8c; }
+    .controls { display: flex; gap: 12px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+    .controls input { width: 110px; }
+    button { border: none; border-radius: 10px; padding: 12px 18px; font-size: 16px; font-weight: 700; cursor: pointer; transition: transform .15s, opacity .15s; }
+    button:hover { transform: translateY(-2px); }
+    button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .draw-btn { background: #2b4c8c; color: #fff; }
+    .reset-btn { background: #e8edf7; color: #2b4c8c; }
+    .result-box { min-height: 180px; border: 2px dashed #c9d4e8; border-radius: 12px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; background: #fbfcff; }
+    .winner { font-size: 34px; font-weight: 800; color: #b02a37; word-break: break-word; }
+    .rolling { font-size: 28px; font-weight: 700; color: #2b4c8c; }
+    .error { color: #c0392b; font-weight: 700; margin-top: 12px; min-height: 22px; }
+    .info { margin-top: 16px; color: #555; }
+    .history { margin-top: 20px; }
+    .history ul { padding-left: 20px; margin: 8px 0 0; }
+    .history li { margin-bottom: 4px; }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 班級抽籤器</h1>
+    <p class="subtitle">輸入名單後即可隨機抽籤，抽過的人不會重複中獎。</p>
+    <div class="layout">
+      <section>
+        <label for="nameInput">參加抽籤名單（每行一位）</label>
+        <textarea id="nameInput" placeholder="王小明&#10;李大華&#10;陳美美"></textarea>
+        <div class="controls">
+          <label for="drawCount">抽出人數</label>
+          <input id="drawCount" type="number" min="1" value="1">
+          <button id="drawBtn" class="draw-btn">開始抽籤</button>
+          <button id="resetBtn" class="reset-btn">重置名單</button>
+        </div>
+        <div class="error" id="errorMsg"></div>
+        <div class="info">目前剩餘可抽人數：<span id="remainingCount">0</span> 人</div>
+      </section>
+      <section>
+        <label>抽籤結果</label>
+        <div class="result-box" id="resultBox">請先輸入名單，再按下「開始抽籤」。</div>
+        <div class="history">
+          <label>抽籤紀錄</label>
+          <ul id="historyList"></ul>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script>
+    const nameInput = document.getElementById("nameInput");
+    const drawCount = document.getElementById("drawCount");
+    const drawBtn = document.getElementById("drawBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const resultBox = document.getElementById("resultBox");
+    const errorMsg = document.getElementById("errorMsg");
+    const remainingCount = document.getElementById("remainingCount");
+    const historyList = document.getElementById("historyList");
+    let candidates = [];
+    let history = [];
+    function showError(message) { errorMsg.textContent = message; }
+    function clearError() { errorMsg.textContent = ""; }
+    function loadNames() {
+      const lines = nameInput.value.split("\n").map(name => name.trim()).filter(name => name !== "");
+      candidates = [...new Set(lines)];
+      remainingCount.textContent = candidates.length;
+    }
+    function updateHistory() {
+      historyList.innerHTML = "";
+      if (history.length === 0) { historyList.innerHTML = "<li>目前還沒有抽籤紀錄。</li>"; return; }
+      history.forEach((record, index) => {
+        const li = document.createElement("li");
+        li.textContent = `第 ${index + 1} 次抽籤：${record.join("、")}`;
+        historyList.appendChild(li);
+      });
+    }
+    function startDraw() {
+      clearError();
+      loadNames();
+      const count = Number(drawCount.value);
+      if (candidates.length === 0) { showError("請至少輸入一位參加者。"); return; }
+      if (!Number.isInteger(count) || count <= 0) { showError("抽出人數必須是正整數。"); return; }
+      if (count > candidates.length) { showError(`抽出人數不能大於剩餘人數（目前剩 ${candidates.length} 人）。`); return; }
+      drawBtn.disabled = true;
+      resultBox.innerHTML = '<div class="rolling">抽籤中…</div>';
+      let rollTimes = 0;
+      const rollTimer = setInterval(() => {
+        const randomName = candidates[Math.floor(Math.random() * candidates.length)];
+        resultBox.innerHTML = `<div class="rolling">${randomName}</div>`;
+        rollTimes++;
+        if (rollTimes >= 18) { clearInterval(rollTimer); finishDraw(count); }
+      }, 80);
+    }
+    function finishDraw(count) {
+      const winners = [];
+      for (let i = 0; i < count; i++) {
+        const index = Math.floor(Math.random() * candidates.length);
+        winners.push(candidates[index]);
+        candidates.splice(index, 1);
+      }
+      history.push(winners);
+      remainingCount.textContent = candidates.length;
+      resultBox.innerHTML = `<div class="winner">🎉 ${winners.join("、")}</div>`;
+      updateHistory();
+      drawBtn.disabled = false;
+    }
+    function resetList() {
+      candidates = [];
+      history = [];
+      resultBox.innerHTML = "請先輸入名單，再按下「開始抽籤」。";
+      remainingCount.textContent = "0";
+      historyList.innerHTML = "<li>目前還沒有抽籤紀錄。</li>";
+      clearError();
+    }
+    drawBtn.addEventListener("click", startDraw);
+    resetBtn.addEventListener("click", resetList);
+    updateHistory();
+  </script>
+</body>
+</html>
